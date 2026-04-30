@@ -1,0 +1,12 @@
+{
+  "Author": "your name here",
+  "Name": "MarketMage",
+  "Punchline": "Market-board smoke-test helper for recent shard sales.",
+  "Description": "Opens with /marketmage. Fetches recent Universalis sale history for entered item IDs when Refresh is clicked.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "market",
+    "universalis",
+    "profit"
+  ]
+}
