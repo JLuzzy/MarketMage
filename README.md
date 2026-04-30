@@ -52,3 +52,11 @@ MarketMage/bin/x64/Debug/MarketMage.dll
 
 - Universalis API for market-board sale history.
 - Dalamud/Lumina game data for item names, worlds, and recipes.
+
+
+## Future Updates
+
+- Worlds sorted by data center with data center headers
+- 'Cost' shows price in selected world and cheapest in data center
+- Current search is centered around crafting, add alternatives (Desynth, etc?)
+  
