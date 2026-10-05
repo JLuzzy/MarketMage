@@ -7,7 +7,7 @@ namespace MarketMage.Services;
 
 public interface IMarketDataClient
 {
-    Task<IReadOnlyList<uint>> GetRecentItemsAsync(string dataCenter, CancellationToken token);
+    Task<IReadOnlyDictionary<uint, AggregateSnapshot?>> GetAggregatesAsync(string scope, IReadOnlyCollection<uint> itemIds, CancellationToken token);
     Task<IReadOnlyList<MarketPriceSnapshot>> GetSnapshotsAsync(string scope, IReadOnlyCollection<uint> itemIds,
         bool hq, bool listings, CancellationToken cancellationToken, bool includeHistory = false);
 }

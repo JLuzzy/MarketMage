@@ -114,14 +114,14 @@ internal static class OpportunityChecks
             Equal(false, Evaluate(recipes: [duplicate], ingredients: new Dictionary<uint, MarketPriceSnapshot> { [2] = Stock(Listing(quantity: 3)) })
                 .Any(r => r.Kind == OpportunityKind.Craft));
         });
-        Test("Candidate discovery prioritizes fresh markets and rotates broader catalog", () =>
+        Test("Validation rotates lower-ranked candidates without dropping the strongest", () =>
         {
-            var catalog = Enumerable.Range(1, 250).Select(i => new ItemCatalogEntry { ItemId = (uint)i }).ToArray();
-            var first = OpportunityScanner.PlanCandidates(catalog, [200u, 999u, 200u], [240u], 0);
-            Equal(240u, first[0]); Equal(200u, first[1]); Equal(102, first.Length);
-            var second = OpportunityScanner.PlanCandidates(catalog, [], [], 100);
-            Equal(101u, second[0]); Equal(200u, second[^1]);
-            Equal(100, OpportunityScanner.PlanCandidates(catalog, [], [], 240).Length);
+            var ranked = Enumerable.Range(1, 300).Select(i => new ScreenCandidate((uint)i, 301 - i)).ToArray();
+            var valid = ranked.Select(c => c.ItemId).ToHashSet();
+            var first = OpportunityScanner.PlanValidation(ranked, [290u, 999u], valid, 0);
+            Equal(290u, first[0]); Equal(201, first.Length); True(first.Contains(1u)); True(first.Contains(151u));
+            var second = OpportunityScanner.PlanValidation(ranked, [], valid, 50);
+            True(second.Contains(201u)); Equal(false, second.Contains(151u));
         });
         Test("A rescan removes a no-longer-profitable finding", () =>
         {
@@ -204,7 +204,14 @@ internal static class OpportunityChecks
         public List<string> Scopes { get; } = [];
         public Action? OnRequest { get; init; }
         public int IngredientRequests { get; private set; }
-        public Task<IReadOnlyList<uint>> GetRecentItemsAsync(string dataCenter, CancellationToken token) => Task.FromResult<IReadOnlyList<uint>>([1u]);
+        public Task<IReadOnlyDictionary<uint, AggregateSnapshot?>> GetAggregatesAsync(string scope, IReadOnlyCollection<uint> ids, CancellationToken token)
+        {
+            OnRequest?.Invoke(); token.ThrowIfCancellationRequested();
+            var quality = new AggregateQuality { WorldMinimum = 201, DcMinimum = 100, DcMinimumWorldId = 1,
+                WorldAverageSale = 200, WorldDailySales = 10, WorldLastSale = now.AddHours(-1) };
+            return Task.FromResult<IReadOnlyDictionary<uint, AggregateSnapshot?>>(ids.ToDictionary(id => id, id => (AggregateSnapshot?)new AggregateSnapshot
+            { ItemId = id, Nq = quality, Hq = quality, UploadTimes = new Dictionary<uint, DateTimeOffset> { [0] = now, [1] = now } }));
+        }
         public Task<IReadOnlyList<MarketPriceSnapshot>> GetSnapshotsAsync(string scope, IReadOnlyCollection<uint> ids,
             bool hq, bool listings, CancellationToken cancellationToken, bool includeHistory = false)
         {

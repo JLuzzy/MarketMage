@@ -76,6 +76,7 @@ AsyncTest("Cancellation prevents subsequent request batches", async () =>
     Equal(1, handler.Urls.Count);
 });
 tests.AddRange(OpportunityChecks.All());
+tests.AddRange(AggregateChecks.All());
 var failures = 0;
 foreach (var test in tests)
 {

@@ -11,6 +11,9 @@
     <Compile Include="../MarketMage/Services/MarketParser.cs" Link="Services/MarketParser.cs" />
     <Compile Include="../MarketMage/Services/ProfitCalculator.cs" Link="Services/ProfitCalculator.cs" />
     <Compile Include="../MarketMage/Services/UniversalisService.cs" Link="Services/UniversalisService.cs" />
+    <Compile Include="../MarketMage/Services/AggregateParser.cs" Link="Services/AggregateParser.cs" />
+    <Compile Include="../MarketMage/Services/AggregateCache.cs" Link="Services/AggregateCache.cs" />
+    <Compile Include="../MarketMage/Services/AggregateScreener.cs" Link="Services/AggregateScreener.cs" />
     <Compile Include="../MarketMage/Services/IMarketDataClient.cs" Link="Services/IMarketDataClient.cs" />
     <Compile Include="../MarketMage/Services/OpportunityEngine.cs" Link="Services/OpportunityEngine.cs" />
     <Compile Include="../MarketMage/Services/OpportunityScanner.cs" Link="Services/OpportunityScanner.cs" />

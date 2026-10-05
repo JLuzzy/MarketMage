@@ -36,6 +36,7 @@ public sealed record GilOpportunity
     public long Outlay { get; init; }
     public long Profit => Revenue - Outlay;
     public double Roi => Outlay > 0 ? (double)Profit / Outlay : 0;
+    public double? EstimatedDailySales { get; init; }
     public int SampleSales { get; init; }
     public long SampleUnits { get; init; }
     public DateTimeOffset LastSale { get; init; }

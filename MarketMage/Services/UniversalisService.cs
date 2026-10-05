@@ -21,8 +21,30 @@ public sealed class UniversalisService : IMarketDataClient, IDisposable
     {
         httpClient = client ?? new HttpClient();
         httpClient.Timeout = TimeSpan.FromSeconds(30);
-        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("MarketMage/0.3");
+        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("MarketMage/0.4");
         requestInterval = minimumInterval ?? TimeSpan.FromSeconds(1);
+    }
+
+    public async Task<IReadOnlyDictionary<uint, AggregateSnapshot?>> GetAggregatesAsync(
+        string scope, IReadOnlyCollection<uint> itemIds, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(scope)) throw new ArgumentException("Market scope cannot be empty.", nameof(scope));
+        var result = new Dictionary<uint, AggregateSnapshot?>();
+        foreach (var batch in itemIds.Distinct().Chunk(100))
+        {
+            var url = $"https://universalis.app/api/v2/aggregated/{Uri.EscapeDataString(scope)}/{string.Join(',', batch)}";
+            try
+            {
+                var json = await GetJsonAsync(url, token).ConfigureAwait(false);
+                foreach (var pair in AggregateParser.Parse(json, batch)) result[pair.Key] = pair.Value;
+            }
+            catch (HttpRequestException ex) when (batch.Length == 1 && ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Unlike multi-item requests, an unavailable single item may return 404.
+                result[batch[0]] = null;
+            }
+        }
+        return result;
     }
 
     public async Task<IReadOnlyList<uint>> GetRecentItemsAsync(string dataCenter, CancellationToken token)

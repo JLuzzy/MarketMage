@@ -6,15 +6,28 @@ MarketMage is a Dalamud plugin that finds potential ways to make gil in Final Fa
 
 - Detects your **home world for selling** and **current data center for buying**. If you visit another data center, the source markets change and old results clear.
 - Looks for **crafting opportunities** and **buy-on-another-world / resell-at-home opportunities**, separately for NQ and HQ.
-- Prioritizes up to 200 recently updated DC item IDs, current findings, and saved watchlist items. Each round also checks the next 100 items in the marketable local catalog, so discovery broadens over time.
-- Publishes results in batches of 25 and ranks qualifying plans by estimated net gil, then sampled sales activity. Coverage and progress are visible; this is not a complete live-market scan.
+- Screens **the entire marketable local catalog every round** using Universalis's cached aggregate endpoint, 100 item IDs per request. A 16,845-item catalog takes 169 screening requests on your home DC, instead of rotating just 100 new items every 10 minutes.
+- Aggregate responses include both NQ/HQ prices and world/DC summaries. When visiting another DC, a separate source-DC screening pass is needed; home-world prices still determine sale revenue.
+- Ranks preliminary signals using average sale price, current minimum listing price, estimated daily sales velocity, and ingredient costs. Aggregate unit prices are used only to select candidates—not as verified shopping plans.
+- Validates the top 150 candidate items plus 50 rotating lower-ranked candidates, and up to 50 existing/watchlist items (deduplicated). Lower-ranked candidates rotate so repeated false positives cannot monopolize detailed checks.
+- Publishes listing-checked results in batches of 25 and ranks qualifying plans by estimated net gil, then sampled sales activity. Separate counters show catalog items screened, items with home sales data, items with fresh home uploads, source-DC price availability/freshness, and shortlisted items checked against actual listings. Full screening coverage does not mean every item has usable data or that every listing was checked.
 - Compares alternate recipes and batches of 1, 5, and 10 crafts. Shows the recipe, crafting job/level, required craft count, and output quantity.
 - Builds a **whole-stack shopping plan**, including which world to visit, quantities, unit prices, and assumed purchase tax. Different ingredients may come from different worlds in your local DC.
 - Filters by gil budget per plan, minimum net profit, minimum ROI, minimum sampled sales, and maximum market-data age. Defaults: 100,000 gil budget, 1,000 gil profit, 10% ROI, three sampled sales in seven days, and data no older than 24 hours.
-- Automatically starts another round 10 minutes after completion. Pause scanning or use Scan now at any time. Closing the window, switching to manual comparison, logging out, changing scope, or unloading cancels outstanding discovery work.
+- Automatically starts another round 10 minutes after successful completion; a failed round retries after one minute. Pause scanning or use Scan now at any time. Closing the window, switching to manual comparison, logging out, changing scope, or unloading cancels outstanding discovery work.
 - Removes findings when a rescan no longer supports them. Findings expire 15 minutes after evaluation or when their source data crosses the configured age limit.
 
 Automatic scanning performs public market-data analysis only. MarketMage does not buy, sell, craft, gather, move, manage retainers, or interact automatically with game servers.
+
+## Screening and data availability
+
+The aggregate API is preferred by Universalis for clients that do not yet need individual listings. It returns world/DC minimum listing prices, quality-specific average sale prices, daily sales velocity, and upload timestamps. Average sale prices and velocity are calculated by Universalis from the last four days. These are estimates from crowdsourced data, not guaranteed demand.
+
+A preliminary crafting signal requires fresh aggregate costs for every ingredient. The screener compares unit-cost estimates, while final validation still requires whole-stack affordability, enough stock, and sampled sale evidence. A preliminary signal can disappear during validation; only validated opportunities are displayed.
+
+Successful aggregate responses are cached in memory for 10 minutes by world/DC and item. Unavailable items are cached for two minutes. Pausing and resuming reuses recent batches; a plugin restart clears the cache. Missing or explicitly failed API items are recorded as unavailable, not as zero-price bargains. A network error leaves coverage partial. Stale data remains distinguishable from screened-but-unavailable data.
+
+The first broad pass can take several minutes: all requests share the one-second pacing limit, and server latency/retries add time. Visiting another DC requires a second aggregate scope and roughly doubles the screening requests. Detailed verification adds requests after screening. The UI reports progress through both stages.
 
 ## How opportunities are estimated
 
@@ -27,6 +40,8 @@ Automatic scanning performs public market-data analysis only. MarketMage does no
 All opportunity results require positive net profit, sufficient stock, complete cost data, and the configured budget/ROI/profit thresholds. The budget applies separately to each plan, not to a combined portfolio of plans. Profit assumes every output unit sells at the estimate. Travel, crafting time, gear, consumables, and recipe unlock costs are excluded. HQ craft results require you to produce HQ outputs; character recipe access and crafting ability are not validated.
 
 Universalis returns up to 100 listings and 20 sales per item/quality/scope in these requests. The seven-day sales figure is the portion of that sample falling in the time window, **not total market volume or a sell-through prediction**. Requests are serialized, paced at least one second apart, batched by up to 50 IDs, and retried at most twice for throttling/server errors while respecting Retry-After. Shared ingredient responses are reused within a scan round. Large rounds can take several minutes.
+
+The opportunity table also shows aggregate estimated units sold per day, separately from the detailed transaction sample used for validation.
 
 The public market is crowdsourced and can change between upload, scan, and purchase. Recheck the shopping plan before buying. Separate opportunities can depend on the same stock and must not be added together as guaranteed profit. If no plans qualify, the UI reports that honestly rather than filling the list with speculative margins.
 
@@ -54,7 +69,7 @@ dotnet build MarketMage.sln -c Debug -p:Platform=x64 -p:RestoreLockedMode=true
 dotnet run --project MarketMage.Tests -c Release
 ```
 
-The offline regression executable needs no game installation and exits nonzero on failure. It covers parsing, HQ/NQ separation, whole-stack purchases, profit arithmetic, alternate recipes, budget/demand/freshness filters, candidate rotation, local-DC boundaries, incremental scanning, cancellation, batching, caching, and expiry. CI runs these checks, builds on Windows, and uploads the DLL/manifest.
+The offline regression executable needs no game installation and exits nonzero on failure. It covers parsing, HQ/NQ separation, whole-stack purchases, profit arithmetic, alternate recipes, budget/demand/freshness filters, full-catalog screening, separate availability counters, shortlist rotation, local-DC boundaries, incremental scanning, cancellation/resume, batching, caching, and expiry. CI runs these checks, builds on Windows, and uploads the DLL/manifest.
 
 Optional read-only live API smoke check (not part of CI):
 
@@ -77,7 +92,8 @@ Debug DLL: `MarketMage/bin/x64/Debug/MarketMage.dll`.
 These require an actual FFXIV/Dalamud session; compilation, API smoke checks, and offline tests do not establish that they passed.
 
 - Open with no watchlist and verify automatic discovery begins using the correct home world and current DC.
-- Confirm results arrive in batches and each row opens its shopping plan; check a resale stack and a multi-yield crafting recipe manually.
+- Confirm catalog screening progresses beyond the old small subset to the full catalog, then detailed shortlist checks begin. Verify missing/stale data counters remain distinct from screened count.
+- Confirm validated results arrive in batches and each row opens its shopping plan; check a resale stack and a multi-yield crafting recipe manually.
 - Confirm HQ plans are labeled and show crafting job/level where applicable.
 - Change budget/profit/freshness filters and verify old findings clear before rescanning.
 - Pause, close, switch views, log out, travel to another DC, or unload mid-scan; verify no late results appear for the previous scope.
@@ -95,5 +111,5 @@ These require an actual FFXIV/Dalamud session; compilation, API smoke checks, an
 
 ## Data sources
 
-- [Universalis API documentation](https://docs.universalis.app/) and its [v2 schema](https://docs.universalis.app/api/schema/v2): recent-market discovery, sale history, and listings.
+- [Universalis API documentation](https://docs.universalis.app/) and its [v2 schema](https://docs.universalis.app/api/schema/v2): aggregate world/DC screening, sale history, and listings.
 - Dalamud/Lumina: player world/DC, marketable items, recipes, crafting job/level, and HQ capability.
