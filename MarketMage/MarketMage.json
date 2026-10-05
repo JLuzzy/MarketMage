@@ -1,8 +1,8 @@
 {
-  "Author": "your name here",
+  "Author": "MarketMage contributors",
   "Name": "MarketMage",
-  "Punchline": "Market-board smoke-test helper for recent shard sales.",
-  "Description": "Opens with /marketmage. Fetches recent Universalis sale history for entered item IDs when Refresh is clicked.",
+  "Punchline": "Compare crafting costs and market prices across your data center.",
+  "Description": "Use /marketmage to compare HQ or NQ sale history with NQ ingredient listings, local and data-center costs, and estimated crafting profit. Manual refresh only.",
   "ApplicableVersion": "any",
   "Tags": [
     "market",

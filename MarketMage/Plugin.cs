@@ -21,7 +21,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
-        MainWindow = new MainWindow(DataManager, Log);
+        MainWindow = new MainWindow(DataManager, Log, PluginInterface);
         WindowSystem.AddWindow(MainWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)

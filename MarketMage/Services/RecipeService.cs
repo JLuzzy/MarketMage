@@ -15,6 +15,9 @@ public sealed class RecipeService
         this.dataManager = dataManager;
     }
 
+    public HashSet<uint> GetCraftableItemIds() => dataManager.GetExcelSheet<Recipe>()
+        .Where(r => r.ItemResult.RowId > 0).Select(r => r.ItemResult.RowId).ToHashSet();
+
     public IReadOnlyDictionary<uint, CraftingRecipe> GetRecipesForItems(IEnumerable<uint> itemIds)
     {
         var wantedItemIds = itemIds.ToHashSet();
