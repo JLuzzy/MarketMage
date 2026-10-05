@@ -26,6 +26,7 @@ public sealed class OpportunitiesPanel : IDisposable
     private readonly LatestRequest<ScanSummary> request = new();
     private readonly ConcurrentQueue<(int Generation, ScanUpdate Update)> updates = new();
     private readonly OpportunityBook book = new();
+    private readonly RegionalHistoryPanel regionalHistory = new();
     private ScanCoverage coverage = new(0, 0, 0, 0, 0);
     private ScanPhase phase;
     private ScanScope? scope;
@@ -40,6 +41,8 @@ public sealed class OpportunitiesPanel : IDisposable
     private bool showResales = true;
     private bool showHq = true;
     private string search = string.Empty;
+    private bool showMonitor;
+    private bool showCompleted;
     private bool disposed;
 
     public OpportunitiesPanel(IPlayerState player, UniversalisService market, IReadOnlyList<ItemCatalogEntry> catalog,
@@ -54,6 +57,7 @@ public sealed class OpportunitiesPanel : IDisposable
         this.config = config;
         this.pluginInterface = pluginInterface;
         this.log = log;
+        config.MonitoredOpportunities ??= [];
         NormalizeSettings();
     }
 
@@ -102,6 +106,7 @@ public sealed class OpportunitiesPanel : IDisposable
         {
             if (queued.Generation != generation) continue;
             book.Apply(queued.Update);
+            if (OpportunityMonitor.Apply(config.MonitoredOpportunities, scope, queued.Update, DateTimeOffset.UtcNow)) Save();
             coverage = queued.Update.Coverage;
             phase = queued.Update.Phase;
             scanned = queued.Update.Completed;
@@ -121,6 +126,7 @@ public sealed class OpportunitiesPanel : IDisposable
 
     public void Suspend()
     {
+        regionalHistory.Reset();
         if (request.IsRunning)
         {
             request.Cancel();
@@ -138,7 +144,8 @@ public sealed class OpportunitiesPanel : IDisposable
         var activeSettings = Settings;
         var activeGeneration = ++generation;
         var offset = rotation;
-        var priority = book.Current(DateTimeOffset.UtcNow, activeSettings).Select(r => r.ItemId)
+        var priority = OpportunityMonitor.Priority(config.MonitoredOpportunities, activeScope)
+            .Concat(book.Current(DateTimeOffset.UtcNow, activeSettings).Select(r => r.ItemId))
             .Concat(config.SelectedItems ?? []).Distinct().ToArray();
         scanned = total = 0;
         coverage = new(0, catalog.Count, 0, 0, 0);
@@ -163,6 +170,10 @@ public sealed class OpportunitiesPanel : IDisposable
     public void Draw()
     {
         ImGui.TextUnformatted("Find ways to make gil");
+        ImGui.SameLine();
+        if (ImGui.Button(showMonitor ? "Back to opportunities" : $"Monitor / checklist ({config.MonitoredOpportunities.Count(e => !e.Sold)})")) { showMonitor = !showMonitor; regionalHistory.Reset(); }
+        DrawTimingAssumption();
+        if (showMonitor) { DrawMonitor(); return; }
         if (scope == null) { ImGui.TextWrapped(status); return; }
         ImGui.TextWrapped($"Sell on {scope.SaleWorld} (home world) | Buy on {scope.DataCenter} (current data center)");
         var auto = config.AutoScan;
@@ -208,7 +219,7 @@ public sealed class OpportunitiesPanel : IDisposable
         }
         if (ImGui.BeginTable("gil-opportunities", 9, TableFlags, new Vector2(0, Math.Max(160, ImGui.GetContentRegionAvail().Y * 0.45f))))
         {
-            Headers("Item / quality", "Method", "Sell qty", "Buy cost", "Net gil", "ROI", "Buy worlds", "Units/day (est.)", "Checked");
+            Headers("Item / quality", "Method", "Sell qty", "Buy cost", "Net gil", "ROI", "Buy worlds", "Units/day / batch time", "Checked");
             foreach (var row in rows.Take(100))
             {
                 ImGui.TableNextRow(); ImGui.TableNextColumn();
@@ -217,7 +228,7 @@ public sealed class OpportunitiesPanel : IDisposable
                 Cell(row.OutputQuantity.ToString("N0")); Cell(row.Outlay.ToString("N0"));
                 ImGui.TableNextColumn(); ImGui.TextColored(new Vector4(0.4f, 0.9f, 0.5f, 1), $"+{row.Profit:N0}");
                 Cell(row.Roi.ToString("P0")); Cell(string.Join(", ", row.Purchases.Select(p => p.World).Distinct()));
-                Cell(row.EstimatedDailySales?.ToString("N1") ?? "Unknown");
+                Cell($"{row.EstimatedDailySales?.ToString("N1") ?? "Unknown"}/day | {SaleTiming.Format(SaleTiming.Days(row.OutputQuantity, row.EstimatedDailySales, config.ExpectedMarketSharePercent))}");
                 Cell($"{Math.Max(0, (DateTimeOffset.UtcNow - row.CheckedAt).TotalMinutes):F0}m ago");
             }
             ImGui.EndTable();
@@ -241,9 +252,21 @@ public sealed class OpportunitiesPanel : IDisposable
         NormalizeSettings(); Suspend(); book.Clear(); nextScan = DateTimeOffset.UtcNow.AddSeconds(2); Save();
     }
 
-    private static void DrawPlan(GilOpportunity row)
+    private void DrawPlan(GilOpportunity row)
     {
+        regionalHistory.Draw(row);
         ImGui.Separator();
+        var tracked = config.MonitoredOpportunities.Any(e => !e.Sold && OpportunityMonitor.Matches(e, row, scope!.DataCenter));
+        ImGui.BeginDisabled(tracked || config.MonitoredOpportunities.Count(e => !e.Sold) >= OpportunityMonitor.MaximumActive);
+        if (ImGui.Button(tracked ? "On monitor list" : "Track this opportunity"))
+        {
+            OpportunityMonitor.Add(config.MonitoredOpportunities, row, scope!.DataCenter, DateTimeOffset.UtcNow);
+            Save();
+        }
+        ImGui.EndDisabled();
+        if (!tracked && config.MonitoredOpportunities.Count(e => !e.Sold) >= OpportunityMonitor.MaximumActive)
+            ImGui.TextDisabled("Monitor full: complete or remove an active plan to track another.");
+        ImGui.TextWrapped($"Estimated batch sale time: {SaleTiming.Format(SaleTiming.Days(row.OutputQuantity, row.EstimatedDailySales, config.ExpectedMarketSharePercent))} at {config.ExpectedMarketSharePercent}% of observed market demand. This is a scenario, not a sell-through guarantee.");
         ImGui.TextWrapped($"{row.ItemName}: sell {row.OutputQuantity:N0} {(row.HighQuality ? "HQ" : "NQ")} at an estimated {row.SalePrice:N0} gil each on {row.SaleWorld}.");
         if (row.Kind == OpportunityKind.Craft)
             ImGui.TextWrapped($"Craft {row.CraftCount} times using recipe {row.RecipeId} ({row.CraftJob}, level {row.CraftLevel}). Buy the stacks below; leftover materials are valued at zero in this plan. Check recipe access and gear; HQ plans require HQ outputs.");
@@ -260,8 +283,73 @@ public sealed class OpportunitiesPanel : IDisposable
         ImGui.EndTable();
     }
 
+    private void DrawTimingAssumption()
+    {
+        var share = config.ExpectedMarketSharePercent;
+        ImGui.SetNextItemWidth(180);
+        if (ImGui.SliderInt("Your assumed share of daily sales (%)", ref share, 1, 100))
+        { config.ExpectedMarketSharePercent = share; Save(); }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Batch quantity / (world units per day x your assumed share). Competing sellers and price changes can make actual sales slower. 25% is an editable scenario, not a measured share.");
+    }
+
+    private void DrawMonitor()
+    {
+        ImGui.TextWrapped("Saved plans and checklist progress stay here even when an opportunity disappears. Checkboxes are your manual records; scans do not detect purchases or sales. Up to 50 active plans are prioritized during scans on their saved world/DC.");
+        ImGui.TextWrapped(status);
+        ImGui.Checkbox("Show sold plans", ref showCompleted);
+        if (scope != null)
+        {
+            ImGui.SameLine(); ImGui.BeginDisabled(request.IsRunning);
+            if (ImGui.Button("Recheck with next scan")) Start();
+            ImGui.EndDisabled();
+        }
+        if (config.MonitoredOpportunities.Count == 0) ImGui.TextWrapped("Select an opportunity and click Track this opportunity to save it here.");
+        foreach (var entry in config.MonitoredOpportunities.Where(e => showCompleted || !e.Sold).ToArray())
+        {
+            var plan = entry.SavedPlan;
+            ImGui.PushID(entry.Id);
+            if (ImGui.CollapsingHeader($"{plan.ItemName} ({(plan.HighQuality ? "HQ" : "NQ")}) — {plan.Kind} — {plan.SaleWorld} / {entry.SourceDataCenter}##plan"))
+            {
+                ImGui.TextWrapped($"{OpportunityMonitor.Status(entry, DateTimeOffset.UtcNow)} | Last check: {entry.LastCheckedAt?.LocalDateTime.ToString("g") ?? "Never"}");
+                if (scope == null || entry.SourceDataCenter != scope.DataCenter || plan.SaleWorld != scope.SaleWorld)
+                    ImGui.TextWrapped("Monitoring pauses for this entry until your sale world and source DC match its saved scope.");
+                ImGui.TextWrapped($"Saved plan: {plan.OutputQuantity:N0} output units, cost {plan.Outlay:N0}, estimated profit {plan.Profit:N0} gil. Saved {entry.SavedAt.LocalDateTime:g}.");
+                var latest = entry.LatestPlan;
+                var rate = latest?.EstimatedDailySales ?? plan.EstimatedDailySales;
+                ImGui.TextWrapped($"Saved batch sale-time scenario: {SaleTiming.Format(SaleTiming.Days(plan.OutputQuantity, rate, config.ExpectedMarketSharePercent))} at {config.ExpectedMarketSharePercent}% share; {rate?.ToString("N1") ?? "unknown"} units/day (latest qualifying estimate, otherwise saved data).");
+                if (latest != null) ImGui.TextWrapped($"Latest qualifying plan: {latest.OutputQuantity:N0} units, cost {latest.Outlay:N0}, profit {latest.Profit:N0}. Your saved plan and checkboxes have not changed.");
+                for (var i = 0; i < plan.Purchases.Count; i++)
+                {
+                    var step = plan.Purchases[i];
+                    var bought = entry.PurchasedSteps.Contains(i);
+                    if (ImGui.Checkbox($"Bought {step.Quantity:N0} x {step.ItemName} on {step.World} ({step.CostWithTax:N0} gil)##buy{i}", ref bought))
+                    { if (bought) entry.PurchasedSteps.Add(i); else entry.PurchasedSteps.Remove(i); Save(); }
+                }
+                if (plan.Kind == OpportunityKind.Craft)
+                {
+                    var crafted = entry.Crafted;
+                    if (ImGui.Checkbox($"Crafted {plan.CraftCount} batches", ref crafted)) { entry.Crafted = crafted; Save(); }
+                }
+                var listed = entry.Listed; var sold = entry.Sold;
+                if (ImGui.Checkbox("Listed for sale", ref listed)) { entry.Listed = listed; Save(); }
+                ImGui.SameLine();
+                var cannotReopen = sold && (config.MonitoredOpportunities.Count(e => !e.Sold) >= OpportunityMonitor.MaximumActive ||
+                    config.MonitoredOpportunities.Any(e => !e.Sold && e.Id != entry.Id && OpportunityMonitor.Matches(e, plan, entry.SourceDataCenter)));
+                ImGui.BeginDisabled(cannotReopen);
+                if (ImGui.Checkbox("Sold / completed", ref sold)) { entry.Sold = sold; Save(); }
+                ImGui.EndDisabled();
+                if (cannotReopen) ImGui.TextDisabled("To reopen, free an active slot and remove any active duplicate of this plan.");
+                var notes = entry.Notes;
+                if (ImGui.InputText("Notes", ref notes, 500)) { entry.Notes = notes; Save(); }
+                if (ImGui.Button("Remove saved plan")) { config.MonitoredOpportunities.Remove(entry); Save(); }
+            }
+            ImGui.PopID();
+        }
+    }
+
     private void NormalizeSettings()
     {
+        config.ExpectedMarketSharePercent = Math.Clamp(config.ExpectedMarketSharePercent, 1, 100);
         config.GilBudget = Math.Clamp(config.GilBudget, 1, 999_999_999);
         config.MinimumProfit = Math.Clamp(config.MinimumProfit, 1, 999_999_999);
         config.MinimumRoiPercent = Math.Clamp(config.MinimumRoiPercent, 0, 10000);
@@ -269,7 +357,7 @@ public sealed class OpportunitiesPanel : IDisposable
         config.MaximumAgeHours = Math.Clamp(config.MaximumAgeHours, 1, 168);
     }
     private void Save() => pluginInterface.SavePluginConfig(config);
-    public void Dispose() { disposed = true; Suspend(); request.Dispose(); }
+    public void Dispose() { disposed = true; Suspend(); request.Dispose(); regionalHistory.Dispose(); }
     private const ImGuiTableFlags TableFlags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY;
     private static void Headers(params string[] names) { foreach (var name in names) ImGui.TableSetupColumn(name); ImGui.TableSetupScrollFreeze(0, 1); ImGui.TableHeadersRow(); }
     private static void Cell(string value) { ImGui.TableNextColumn(); ImGui.TextUnformatted(value); }

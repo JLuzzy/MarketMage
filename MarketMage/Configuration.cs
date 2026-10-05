@@ -1,10 +1,13 @@
 using System.Collections.Generic;
 using Dalamud.Configuration;
+using MarketMage.Models;
 
 namespace MarketMage;
 
 public sealed class Configuration : IPluginConfiguration
 {
+    public List<MonitoredOpportunity> MonitoredOpportunities { get; set; } = [];
+    public int ExpectedMarketSharePercent { get; set; } = 25;
     public bool AutoScan { get; set; } = true;
     public int GilBudget { get; set; } = 100_000;
     public int MinimumProfit { get; set; } = 1_000;

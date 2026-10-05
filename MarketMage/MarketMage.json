@@ -2,7 +2,7 @@
   "Author": "MarketMage contributors",
   "Name": "MarketMage",
   "Punchline": "Automatically find crafting and resale opportunities for gil.",
-  "Description": "Open /marketmage to screen the full item catalog for potential gil opportunities using aggregate world/DC prices and sales velocity, then validate promising crafting and resale plans against actual listings. Includes budget, demand, freshness, and ROI filters.",
+  "Description": "Open /marketmage to discover and track gil opportunities. Screen world/DC prices, validate crafting and resale plans, save purchase/craft/list/sold checklists, estimate batch sale times, and optionally inspect Saddlebag regional history.",
   "ApplicableVersion": "any",
   "Tags": [
     "market",

@@ -19,6 +19,32 @@ MarketMage is a Dalamud plugin that finds potential ways to make gil in Final Fa
 
 Automatic scanning performs public market-data analysis only. MarketMage does not buy, sell, craft, gather, move, manage retainers, or interact automatically with game servers.
 
+## Saved monitor and checklist
+
+Select a returned opportunity and click **Track this opportunity**, then open **Monitor / checklist**. Up to 50 active plans are saved in Dalamud configuration and prioritized for detailed checks when their sale world and source DC match your current scope.
+
+- Mark individual shopping stacks purchased, crafting completed, listing completed, and sold/completed. Add notes or remove a plan.
+- Completed plans are hidden by default; enable Show sold plans to view them.
+- The original quantities, shopping plan, profit estimate, and your checklist are preserved. Later scans show the latest qualifying plan separately and never rewrite purchase progress.
+- If a checked item no longer qualifies, the monitor reports **Not qualifying / data unavailable**. If it has not been checked for 15 minutes, it reports **Needs recheck**. Saved plans are not automatically deleted when market opportunities expire.
+- Progress is manual: the plugin does not detect purchases, crafting, retainer listings, or completed sales. Rechecking uses the normal scanner and current filters, not automatic in-game actions.
+
+## Estimated time to sell a batch
+
+The units/day column also shows a batch sale-time scenario:
+
+`days = output quantity / (home-world units per day × assumed share of sales)`
+
+The visible share slider defaults to **25%**, an editable assumption rather than a measured personal market share. For example, 10 units at 2 units/day takes 5 days at 100% of market sales, or 20 days at a 25% share. Missing, zero, or invalid velocity shows Unknown, not an instant sale. Very slow batches can show more than a year.
+
+This is a demand-based planning estimate, not a promise: competition, listing price, stack size, changes in demand, and time spent unlisted affect actual sales. The saved monitor applies the latest qualifying local rate (or explicitly labeled saved data) to the original saved batch quantity.
+
+## Additional regional history
+
+Expand **Additional regional history — Saddlebag Exchange** under an opportunity and press **Load regional history** for regional units/day, median price, and sampled transaction/quantity totals. This optional service derives its FFXIV market data from Universalis too; it adds regional analysis, not independent confirmation. Its metrics never replace home-world profit calculations or batch sale-time estimates.
+
+Lookups are paced and cached, with explicit unavailable/error states. See [the data-source review](docs/data-sources.md) for the tested API contract, provider comparisons, provenance, and limitations.
+
 ## Screening and data availability
 
 The aggregate API is preferred by Universalis for clients that do not yet need individual listings. It returns world/DC minimum listing prices, quality-specific average sale prices, daily sales velocity, and upload timestamps. Average sale prices and velocity are calculated by Universalis from the last four days. These are estimates from crowdsourced data, not guaranteed demand.
@@ -69,12 +95,13 @@ dotnet build MarketMage.sln -c Debug -p:Platform=x64 -p:RestoreLockedMode=true
 dotnet run --project MarketMage.Tests -c Release
 ```
 
-The offline regression executable needs no game installation and exits nonzero on failure. It covers parsing, HQ/NQ separation, whole-stack purchases, profit arithmetic, alternate recipes, budget/demand/freshness filters, full-catalog screening, separate availability counters, shortlist rotation, local-DC boundaries, incremental scanning, cancellation/resume, batching, caching, and expiry. CI runs these checks, builds on Windows, and uploads the DLL/manifest.
+The offline regression executable needs no game installation and exits nonzero on failure. It covers parsing, HQ/NQ separation, whole-stack purchases, profit arithmetic, alternate recipes, budget/demand/freshness filters, full-catalog screening, separate availability counters, shortlist rotation, local-DC boundaries, incremental scanning, cancellation/resume, batching, caching, expiry, saved monitor/checklist roundtrips, sell-time assumptions, and external-provider error handling. CI runs these checks, builds on Windows, and uploads the DLL/manifest.
 
 Optional read-only live API smoke check (not part of CI):
 
 ```powershell
 dotnet run --project MarketMage.Tests -c Release -- --live-smoke
+dotnet run --project MarketMage.Tests -c Release -- --regional-smoke
 ```
 
 Debug DLL: `MarketMage/bin/x64/Debug/MarketMage.dll`.
@@ -99,6 +126,9 @@ These require an actual FFXIV/Dalamud session; compilation, API smoke checks, an
 - Pause, close, switch views, log out, travel to another DC, or unload mid-scan; verify no late results appear for the previous scope.
 - Leave the view open for a full round and automatic rescan; verify obsolete findings disappear and expired findings are removed.
 - Simulate connectivity failure and verify partial-result/error status plus delayed retry.
+- Track an opportunity, mark purchases/crafting/listing progress, add notes, and reload the plugin; verify the saved snapshot and progress remain. Rescan a no-longer-qualifying item and confirm its saved plan is preserved with updated status.
+- Change the assumed sales share and verify both opportunity and saved-batch times change consistently.
+- Load optional Saddlebag context, switch items during loading, and test its unavailable state without disrupting the local scan.
 - Check all columns and shopping details at different window sizes.
 - Verify manual comparisons and saved watchlists/preferences still work after a plugin reload.
 

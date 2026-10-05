@@ -2,6 +2,14 @@ using System.Net;
 using MarketMage.Models;
 using MarketMage.Services;
 
+if (args.Contains("--regional-smoke"))
+{
+    using var regional = new RegionalHistoryService();
+    using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+    var regionalResult = await regional.GetAsync(2, "Cactuar", false, timeout.Token);
+    Console.WriteLine($"PASS Saddlebag regional API: item {regionalResult.ItemId}, {regionalResult.SampleTransactions} sampled transactions; metrics parsed without altering local prices.");
+    return 0;
+}
 if (args.Contains("--live-smoke")) return await LiveSmoke.RunAsync();
 
 var tests = new List<(string Name, Func<Task> Run)>();
@@ -77,6 +85,7 @@ AsyncTest("Cancellation prevents subsequent request batches", async () =>
 });
 tests.AddRange(OpportunityChecks.All());
 tests.AddRange(AggregateChecks.All());
+tests.AddRange(MonitorChecks.All());
 var failures = 0;
 foreach (var test in tests)
 {
