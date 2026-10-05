@@ -19,10 +19,11 @@ public sealed class ItemCatalogService
     {
         return dataManager.GetExcelSheet<Item>()
             .Where(item => item.RowId > 0)
-            .Where(item => item.ItemSearchCategory.RowId > 0)
+            .Where(item => item.ItemSearchCategory.RowId > 0 && !item.IsUntradable)
             .Select(item => new ItemCatalogEntry
             {
                 ItemId = item.RowId,
+                CanBeHq = item.CanBeHq,
                 Name = item.Name.ToString(),
             })
             .Where(item => !string.IsNullOrWhiteSpace(item.Name))

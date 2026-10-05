@@ -16,6 +16,8 @@ namespace MarketMage.Windows;
 
 public sealed class MainWindow : Window, IDisposable
 {
+    private readonly OpportunitiesPanel opportunities;
+    private bool manualMode;
     private const int MaxSelection = 50;
     private readonly UniversalisService market = new();
     private readonly RecipeService recipes;
@@ -39,7 +41,7 @@ public sealed class MainWindow : Window, IDisposable
     private sealed record WorldEntry(string Name, string DataCenter, string Region);
     private sealed record RefreshResult(IReadOnlyList<ProfitEstimate> Estimates, string Context, string? Error);
 
-    public MainWindow(IDataManager data, IPluginLog log, IDalamudPluginInterface pluginInterface) : base("MarketMage")
+    public MainWindow(IDataManager data, IPluginLog log, IDalamudPluginInterface pluginInterface, IPlayerState playerState) : base("MarketMage")
     {
         this.log = log;
         this.pluginInterface = pluginInterface;
@@ -54,6 +56,8 @@ public sealed class MainWindow : Window, IDisposable
         if (!worlds.Any(w => w.Name == config.World)) config.World = worlds.FirstOrDefault()?.Name ?? string.Empty;
         var validIds = catalog.Select(i => i.ItemId).ToHashSet();
         selected = (config.SelectedItems ?? []).Where(validIds.Contains).Take(MaxSelection).ToHashSet();
+        opportunities = new OpportunitiesPanel(playerState, market, catalog, recipes.GetRecipeOptions(validIds),
+            worlds.GroupBy(w => w.DataCenter).ToDictionary(g => g.Key, g => (IReadOnlySet<string>)g.Select(w => w.Name).ToHashSet()), config, pluginInterface, log);
         SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(1050, 650), MaximumSize = new Vector2(float.MaxValue) };
     }
 
@@ -61,11 +65,36 @@ public sealed class MainWindow : Window, IDisposable
     {
         if (disposed) return;
         disposed = true;
+        opportunities.Dispose();
         refresh.Dispose();
         market.Dispose();
     }
 
+    public void UpdateOpportunities() => opportunities.Update(IsOpen && !manualMode);
+
+    public override void OnClose()
+    {
+        opportunities.Suspend();
+        refresh.Cancel();
+    }
+
     public override void Draw()
+    {
+        var previousMode = manualMode;
+        if (ImGui.RadioButton("Find gil opportunities", !manualMode)) manualMode = false;
+        ImGui.SameLine();
+        if (ImGui.RadioButton("Manual comparison", manualMode)) manualMode = true;
+        if (previousMode != manualMode)
+        {
+            if (manualMode) opportunities.Suspend();
+            else refresh.Cancel();
+        }
+        ImGui.Separator();
+        if (!manualMode) { opportunities.Draw(); return; }
+        DrawManual();
+    }
+
+    private void DrawManual()
     {
         if (refresh.TryTake(out var completed))
         {

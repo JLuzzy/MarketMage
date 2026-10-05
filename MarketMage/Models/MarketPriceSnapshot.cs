@@ -10,6 +10,7 @@ public sealed class MarketPriceSnapshot
     public int RecentSalesCount { get; init; }
     public DateTimeOffset? LastSaleTime { get; init; }
     public DateTimeOffset? UploadedAt { get; init; }
+    public IReadOnlyList<RecentSale> Sales { get; init; } = [];
     public IReadOnlyList<MarketListing> Listings { get; init; } = [];
 }
 
@@ -20,3 +21,5 @@ public sealed class MarketListing
     public string World { get; init; } = string.Empty;
     public DateTimeOffset? ReviewedAt { get; init; }
 }
+
+public sealed record RecentSale(long Price, int Quantity, DateTimeOffset SoldAt);

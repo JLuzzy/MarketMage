@@ -5,6 +5,12 @@ namespace MarketMage;
 
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool AutoScan { get; set; } = true;
+    public int GilBudget { get; set; } = 100_000;
+    public int MinimumProfit { get; set; } = 1_000;
+    public int MinimumRoiPercent { get; set; } = 10;
+    public int MinimumSales { get; set; } = 3;
+    public int MaximumAgeHours { get; set; } = 24;
     public int Version { get; set; } = 1;
     public string World { get; set; } = "Cactuar";
     public bool HighQuality { get; set; }

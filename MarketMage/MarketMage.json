@@ -1,8 +1,8 @@
 {
   "Author": "MarketMage contributors",
   "Name": "MarketMage",
-  "Punchline": "Compare crafting costs and market prices across your data center.",
-  "Description": "Use /marketmage to compare HQ or NQ sale history with NQ ingredient listings, local and data-center costs, and estimated crafting profit. Manual refresh only.",
+  "Punchline": "Automatically find crafting and resale opportunities for gil.",
+  "Description": "Open /marketmage to discover potential gil opportunities automatically. Compares whole-stack crafting and resale costs across your current data center against your home-world sale market, with budget, demand, freshness, and ROI filters.",
   "ApplicableVersion": "any",
   "Tags": [
     "market",

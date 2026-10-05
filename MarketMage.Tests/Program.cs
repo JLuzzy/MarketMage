@@ -2,6 +2,8 @@ using System.Net;
 using MarketMage.Models;
 using MarketMage.Services;
 
+if (args.Contains("--live-smoke")) return await LiveSmoke.RunAsync();
+
 var tests = new List<(string Name, Func<Task> Run)>();
 void Test(string name, Action run) => tests.Add((name, () => { run(); return Task.CompletedTask; }));
 void AsyncTest(string name, Func<Task> run) => tests.Add((name, run));
@@ -73,6 +75,7 @@ AsyncTest("Cancellation prevents subsequent request batches", async () =>
     catch (OperationCanceledException) { }
     Equal(1, handler.Urls.Count);
 });
+tests.AddRange(OpportunityChecks.All());
 var failures = 0;
 foreach (var test in tests)
 {

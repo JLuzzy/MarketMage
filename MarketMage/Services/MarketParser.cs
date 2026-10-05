@@ -30,6 +30,7 @@ public static class MarketParser
     private static MarketPriceSnapshot ParseItem(uint id, JsonElement item, string scope, bool hq)
     {
         var prices = new List<long>();
+        var sales = new List<RecentSale>();
         DateTimeOffset? latest = null;
         if (item.TryGetProperty("recentHistory", out var history) && history.ValueKind == JsonValueKind.Array)
             foreach (var entry in history.EnumerateArray())
@@ -38,6 +39,9 @@ public static class MarketParser
                 if (!MatchesQuality(entry, hq) || price <= 0 || price > int.MaxValue) continue;
                 prices.Add(price);
                 var time = Timestamp(Number(entry, "timestamp"));
+                var quantity = Number(entry, "quantity");
+                if (time.HasValue && quantity > 0 && quantity <= int.MaxValue)
+                    sales.Add(new RecentSale(price, (int)quantity, time.Value));
                 if (time.HasValue && (!latest.HasValue || time > latest)) latest = time;
             }
         var listings = new List<MarketListing>();
@@ -56,7 +60,7 @@ public static class MarketParser
         var median = prices.Count == 0 ? 0 : prices.Count % 2 == 1 ? prices[prices.Count / 2]
             : (long)Math.Floor(((decimal)prices[prices.Count / 2 - 1] + prices[prices.Count / 2]) / 2);
         return new MarketPriceSnapshot { ItemId = id, MedianRecentSalePrice = median, RecentSalesCount = prices.Count,
-            LastSaleTime = latest, UploadedAt = Timestamp(Number(item, "lastUploadTime"), true), Listings = listings };
+            LastSaleTime = latest, UploadedAt = Timestamp(Number(item, "lastUploadTime"), true), Listings = listings, Sales = sales };
     }
 
     private static bool MatchesQuality(JsonElement entry, bool hq) =>
